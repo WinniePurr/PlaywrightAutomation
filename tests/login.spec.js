@@ -1,45 +1,122 @@
-// // Import Playwright test utilities and the LoginPage POM
 import { test, expect } from '@playwright/test';
 import LoginPage from '../pages/LoginPage';
+import { users, errorMessages } from '../data/users';
 
-// loginPage is declared here so it is accessible across all tests in this file
 let loginPage;
 
-// Before each test, create a new LoginPage instance and navigate to the login page
+// Navigate to login page and initialise LoginPage before each test
 test.beforeEach(async ({ page }) => {
     loginPage = new LoginPage(page);
     await page.goto('https://www.saucedemo.com/');
 });
 
-// This test suite contains tests related to the login functionality of the application
-test.describe('Login Tests', () => {
+test.describe('Happy Path Login Tests', () => {
 
-    // Happy Path Test: Verify that a user can log in successfully with valid credentials
+    // Valid credentials should redirect to the inventory page
     test('should login successfully with valid credentials', async ({ page }) => {
-        await loginPage.login('standard_user', 'secret_sauce');
-        // Assert that the user is redirected to the inventory page
+        await loginPage.login(users.standardUser.username, users.standardUser.password);
+        await expect(page).toHaveURL('https://www.saucedemo.com/inventory.html');
+    });
+});
+
+test.describe('Negative Path Login Tests', () => {
+
+    // Wrong password for a valid username
+    test('should show error message with invalid password', async ({ page }) => {
+        await loginPage.login(users.invalidPassword.username, users.invalidPassword.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.invalidCredentialsError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Username that does not exist in the system
+    test('should show error message with non-existent user', async ({ page }) => {
+        await loginPage.login(users.nonExistentUser.username, users.nonExistentUser.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.invalidCredentialsError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Valid credentials but account access has been restricted
+    test('should show error message for locked out user', async ({ page }) => {
+        await loginPage.login(users.lockedOutUser.username, users.lockedOutUser.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.lockedOutError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Username field is validated before password
+    test('should show error message with empty username and password', async ({ page }) => {
+        await loginPage.login(users.emptyCredentials.username, users.emptyCredentials.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.emptyUsernameError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Username field is required when password is provided
+    test('should show error message with empty username', async ({ page }) => {
+        await loginPage.login(users.emptyUsername.username, users.emptyUsername.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.emptyUsernameError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Password field is required when username is provided
+    test('should show error message with empty password', async ({ page }) => {
+        await loginPage.login(users.emptyPassword.username, users.emptyPassword.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.emptyPasswordError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+    });
+
+    // Error message should be dismissable when the X button is clicked
+    test('should dismiss error message when X is clicked', async ({ page }) => {
+        await loginPage.login(users.invalidPassword.username, users.invalidPassword.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await loginPage.errorButton.click();
+        await expect(loginPage.errorMessage).not.toBeVisible();
+    });
+
+    // Cannot directly navigate to the inventory page without logging in
+    test('should not allow navigation to inventory page without logging in', async ({ page }) => {
+        await page.goto('https://www.saucedemo.com/inventory.html');
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.directURLAccessError);
+    });
+
+});
+
+test.describe('Recovery Tests', () => {
+
+    // Locked out user should not prevent other users from logging in successfully
+    test('should login successfully with valid user after locked out user is rejected', async ({ page }) => {
+        await loginPage.login(users.lockedOutUser.username, users.lockedOutUser.password);
+        await expect(loginPage.errorMessage).toBeVisible();
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.lockedOutError);
+        await expect(page).toHaveURL('https://www.saucedemo.com/');
+        await loginPage.login(users.standardUser.username, users.standardUser.password);
         await expect(page).toHaveURL('https://www.saucedemo.com/inventory.html');
     });
 
-    // Negative Test: Invalid Credentials - Verify that an error message is displayed when a user attempts to log in with invalid credentials
-    test('should show error message with invalid password', async ({ page }) => {
-        await loginPage.login('standard_user', 'wrong_password');
-        // Assert that the error message is displayed and contains the expected text
+    // Empty credentials attempt should not prevent other users from logging in successfully
+    test('should login successfully with valid user after empty credentials are rejected', async ({ page }) => {
+        await loginPage.login(users.emptyCredentials.username, users.emptyCredentials.password);
         await expect(loginPage.errorMessage).toBeVisible();
-        await expect(loginPage.errorMessage).toHaveText('Epic sadface: Username and password do not match any user in this service');
-        // Assert that the user is NOT redirected to the inventory page and remains on the main login page
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.emptyUsernameError);
         await expect(page).toHaveURL('https://www.saucedemo.com/');
-
+        await loginPage.login(users.standardUser.username, users.standardUser.password);
+        await expect(page).toHaveURL('https://www.saucedemo.com/inventory.html');
     });
 
-    // Negative Test: Empty Credentials - Verify that an error message is displayed when a user attempts to log in without entering any credentials
-    test('should show error message with empty username and password', async ({ page }) => {
-        await loginPage.login('', '');
-        // Assert that the error message is displayed and contains the expected text
+    // Incorrect password attempt should not prevent other users from logging in successfully
+    test('should login successfully with valid user after incorrect password is rejected', async ({ page }) => {
+        await loginPage.login(users.invalidPassword.username, users.invalidPassword.password);
         await expect(loginPage.errorMessage).toBeVisible();
-        await expect(loginPage.errorMessage).toHaveText('Epic sadface: Username is required');
-        // Assert that the user is NOT redirected to the inventory page and remains on the main login page
+        await expect(loginPage.errorMessage).toHaveText(errorMessages.invalidCredentialsError);
         await expect(page).toHaveURL('https://www.saucedemo.com/');
+        await loginPage.login(users.invalidPassword.username, users.standardUser.password);
+        await expect(page).toHaveURL('https://www.saucedemo.com/inventory.html');
     });
-   
+
 });

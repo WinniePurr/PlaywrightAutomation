@@ -8,6 +8,7 @@ class LoginPage {
         this.passwordInput = page.locator('[data-test="password"]');
         this.loginButton = page.locator('[data-test="login-button"]');
         this.errorMessage = page.locator('[data-test="error"]');
+        this.errorButton = page.locator('[data-test="error-button"]');
 
     };
 
