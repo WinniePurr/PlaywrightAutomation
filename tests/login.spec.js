@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('Happy Path Login Tests', () => {
 
     // Valid credentials should redirect to the inventory page
-    test('should login successfully with valid credentials', async ({ page }) => {
+    test('should login successfully with valid credentials', { tag: '@smoke' }, async ({ page }) => {
         await loginPage.login(users.standardUser.username, users.standardUser.password);
         await expect(page).toHaveURL('https://www.saucedemo.com/inventory.html');
     });
